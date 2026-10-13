@@ -22,17 +22,22 @@ class FakeTimeseries:
 
 
 class FakeMetadata:
-    def __init__(self, cost):
+    def __init__(self, cost, size):
         self.cost = cost
+        self.size = size
 
     def get_cost(self, **kwargs):
         return self.cost
 
+    def get_billable_size(self, **kwargs):
+        return self.size
+
 
 class FakeClient:
-    def __init__(self, cost=0.5):
+    # Defaults mirror a covered request under the CME Plus plan: free, ~1h mbp-1.
+    def __init__(self, cost=0.0, size=80_000_000):
         self.timeseries = FakeTimeseries()
-        self.metadata = FakeMetadata(cost)
+        self.metadata = FakeMetadata(cost, size)
 
 
 @pytest.fixture
@@ -94,6 +99,27 @@ def test_max_cost_aborts(client):
     client.metadata.cost = 10.0
     with pytest.raises(RuntimeError, match="max_cost"):
         ingest.load_raw("ES.c.0", START, END, max_cost=1.0)
+    assert client.timeseries.calls == 0
+    assert not ingest.raw_path("ES.c.0", START, END).exists()
+
+
+def test_billed_request_aborts_by_default(client):
+    client.metadata.cost = 0.31  # e.g. mbp-10 older than the plan's 1 month
+    with pytest.raises(RuntimeError, match="max_cost"):
+        ingest.load_raw("ES.c.0", START, END, schema="mbp-10")
+    assert client.timeseries.calls == 0
+
+
+def test_max_cost_none_allows_billed_request(client):
+    client.metadata.cost = 0.31
+    ingest.load_raw("ES.c.0", START, END, max_cost=None)
+    assert client.timeseries.calls == 1
+
+
+def test_max_size_aborts(client):
+    client.metadata.size = 5_000_000_000
+    with pytest.raises(RuntimeError, match="max_size_gb"):
+        ingest.load_raw("ES.c.0", START, END, max_size_gb=1.0)
     assert client.timeseries.calls == 0
     assert not ingest.raw_path("ES.c.0", START, END).exists()
 
