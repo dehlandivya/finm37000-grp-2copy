@@ -39,6 +39,37 @@ One row per raw `mbp-1` record, indexed by `ts_event`.
 Sizes are `int64` (raw data is `uint32`) so that differences such as
 `bid_sz - ask_sz` can go negative.
 
+## Example
+
+Cleaned rows from 2026-10-08, 14:00 UTC (09:00 CT). `ts_recv` is omitted
+for width, and `ts_event` is shown as time of day.
+
+```text
+ts_event         instrument_id  sequence  flags action side    price  size   bid_px   ask_px  bid_sz  ask_sz  locked   roll  session_start
+14:00:00.001084          10252  30531835    128      A    A  7831.50     1  7831.25  7831.50      20      26   False  False           True
+14:00:00.002103          10252  30531836    128      C    B  7831.25     1  7831.25  7831.50      19      26   False  False          False
+...
+14:00:00.032455          10252  30531963    128      A    A  7831.25     1  7831.00  7831.25      50      12   False  False          False
+14:00:00.033220          10252  30531964      0      T    B  7831.25    11  7831.00  7831.25      50      12   False  False          False
+14:00:00.033220          10252  30531965    128      C    A  7831.25     1  7831.00  7831.50      50      51   False  False          False
+14:00:00.033444          10252  30531966    128      A    B  7831.25     3  7831.25  7831.50       3      51   False  False          False
+14:00:00.033465          10252  30531967    128      A    B  7831.25     1  7831.25  7831.50       4      51   False  False          False
+```
+
+Each row is one event, followed by the top of book after it. For example,
+`A B 7831.25 3` adds a 3-lot bid at 7831.25, and `bid_sz` becomes 3.
+
+The last five rows show a buyer sweeping the offer:
+
+- **`T` (30531964):** an 11-lot buy at 7831.25. The book columns still show
+  the book *before* the trade, and `flags` is 0 (no `F_LAST`).
+- **`C` (30531965):** same `ts_event`. The 7831.25 ask level is gone, and
+  the best ask moves up to 7831.50. This is the trade's effect on the book.
+- **`A` (30531966 on):** new bids step up to 7831.25.
+
+`book_states(df)` drops the `T` row and keeps the others. In this minute,
+the 21,212 cleaned rows split into 20,237 book states and 975 trades.
+
 ## Invariants
 
 - Only regular trading hours: 08:30–15:15 CT, excluding 2026-07-03 and
