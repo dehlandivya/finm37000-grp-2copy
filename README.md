@@ -43,6 +43,8 @@ We use CME Globex market data for E-mini S&P 500 futures (`ES`) from Databento. 
 
 Schema choice, roll handling, cost estimates and data-processing notes are in the [Appendix](#appendix-data-specification-notes).
 
+The cleaned dataset that feeds the analysis is documented in [`docs/data-schema.md`](docs/data-schema.md).
+
 ## Research Questions
 
 The analysis will focus on four primary questions:
