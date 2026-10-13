@@ -64,7 +64,7 @@ Every member pulls identical data with the settings below. The defaults live in 
 |---|---|
 | Dataset | `GLBX.MDP3` (CME Globex MDP 3.0) |
 | Primary schema | `mbp-1`: every top-of-book update plus every trade |
-| Metadata schema | `definition`: tick size, expiration, contract details |
+| Metadata schema | `definition`: contract code (`raw_symbol`, e.g. `ESZ6`), tick size (0.25), multiplier (50), expiration |
 | Symbol | `ES.v.0` with `stype_in="continuous"` (front contract by volume) |
 | Session | RTH only, 08:30–15:15 CT |
 | Dev sample | 2026-10-08 RTH (`2026-10-08T13:30` to `2026-10-08T20:15` UTC) |
@@ -80,8 +80,8 @@ Every member pulls identical data with the settings below. The defaults live in 
 **Symbology and rolls.** We use `ES.v.0`, which follows the contract with the highest volume, instead of the calendar-front `ES.c.0`.
 
 - In Sep 2026, `ES.c.0` stayed on ESU6 until 09-20. By 09-17, ESU6 had about 32k RTH trades against about 246k for ESZ6, and on 09-18 it had no RTH trades at all.
-- `ES.v.0` rolled ESU6 → ESZ6 on **2026-09-16**.
-- A roll shows up in the data as a change in `instrument_id` (ESU6 = `42140870`, ESZ6 = `10252`).
+- `ES.v.0` rolled ESU6 → ESZ6 on **2026-09-16**. The switch happens at 00:00 UTC (19:00 CT the previous evening), in the middle of the overnight session. With RTH only, each day therefore has a single contract, and rolls always fall between days.
+- A roll shows up in the data as a change in `instrument_id` (ESU6 = `42140870`, ESZ6 = `10252`). The `symbol` column holds the requested symbol (`ES.v.0`), not the contract. To get the contract code, join `instrument_id` to `raw_symbol` from the `definition` schema.
 - Downstream code flags the first row after a roll and never computes returns across it (#7).
 - `ES.v.0` uses the previous day's volume, so it lags the actual liquidity crossover by a day or two (on 09-14 ESZ6 already traded more than ESU6). Analysis may exclude the roll week as a robustness check.
 
@@ -102,15 +102,18 @@ The CME Plus plan covers L1 history, so everything costs $0. The loader also ref
 
 | Field | Use |
 |---|---|
-| `ts_event` | Exchange event time, the primary time index |
+| `ts_event` | Exchange event time, the primary time index (`read_raw()` indexes by `ts_recv`, so cleaning re-indexes) |
 | `ts_recv` | Capture time, used for latency and execution-delay modelling |
-| `action`, `side` | Event type (Add/Cancel/Modify/Trade/Fill/Clear); for trades, `side` is the aggressor |
+| `action`, `side` | Event type (`A`dd, `C`ancel, `M`odify, `T`rade in our samples); for trades, `side` is the aggressor (`B`/`A`), or `N` for auction trades at the 17:00 CT reopen |
 | `price`, `size` | Event price and size (trade price and size when `action == "T"`) |
 | `bid_px_00`, `ask_px_00` | Best bid/ask after the event: midprice, spread, microprice |
-| `bid_sz_00`, `ask_sz_00` | Best bid/ask size: OBI, OFI, microprice |
+| `bid_sz_00`, `ask_sz_00` | Best bid/ask size: OBI, OFI, microprice. These are `uint32`, so cast to `int64` before subtracting, or `bid - ask` wraps around instead of going negative |
 | `bid_ct_00`, `ask_ct_00` | Number of orders at the best bid/ask, used for liquidity measures |
-| `instrument_id`, `symbol` | Contract identity and roll detection |
+| `instrument_id` | Contract identity and roll detection |
+| `symbol` | Requested symbol (`ES.v.0`); not the contract code |
 | `sequence`, `flags` | Ordering within a timestamp and record-quality flags |
+
+**Checked on real data.** Small `mbp-1` pulls ($0) were read with `load_raw()` → `read_raw()`: 2026-10-08 14:00–14:01 UTC (21k rows) and 2026-09-15 20:14 UTC → 09-16 13:31 UTC across the roll (1.8M rows). All the fields above are present, with no NaN or zero top-of-book sizes. There were no crossed or locked books in the RTH minutes sampled. The only crossed rows were 3 rows at the 17:00 CT reopen, which the RTH filter removes. Cleaning (#7) should still check for them over the full sample.
 
 **Access.** All data is pulled programmatically through the **Databento Historical API** with the `databento` Python client, using each member's **own API key** stored in a local `.env` file (see [How to Run](#how-to-run)). API credentials and raw market data will **not** be committed to the repository. Raw downloads are cached in the git-ignored `data/raw/` directory.
 
