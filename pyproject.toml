@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "FINM 37000 Group 2 project"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["databento", "pandas"]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
