@@ -73,8 +73,9 @@ def test_out_of_order_rows_are_sorted():
 
 
 def test_same_packet_order_is_preserved():
-    # A trade row and the F_LAST book update it causes share ts_event and
-    # sequence. The trade must stay first.
+    # A trade row and the F_LAST book update it causes share ts_event. Real
+    # data gives them consecutive sequence numbers; equal ones here check
+    # that the sort is stable. The trade must stay first.
     ts = T0 + pd.Timedelta(milliseconds=5)
     raw = make_raw(
         [

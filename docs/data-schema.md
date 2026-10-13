@@ -25,7 +25,7 @@ One row per raw `mbp-1` record, indexed by `ts_event`.
 | `ts_event` (index) | `datetime64[ns, UTC]` | Exchange event time, sorted |
 | `ts_recv` | `datetime64[ns, UTC]` | Databento capture time |
 | `instrument_id` | `uint32` | Changes on a contract roll |
-| `sequence` | `int64` | Exchange packet sequence; shared by rows from one packet |
+| `sequence` | `int64` | Exchange message sequence number. Fills from one match event share it; a trade and its book update need not |
 | `flags` | `uint8` | Databento flags; `0x80` (`F_LAST`) marks a complete book state |
 | `action` | `category` | `A`dd, `C`ancel, `M`odify, clea`R`, `T`rade, `F`ill |
 | `side` | `category` | `A`sk, `B`id, `N`one. For trades, the aggressor |
