@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 DATASET = "GLBX.MDP3"
-DEFAULT_SYMBOL = "ES.c.0"  # continuous, calendar-front contract
+DEFAULT_SYMBOL = "ES.v.0"  # continuous, highest-volume contract (see README Data)
 DEFAULT_SCHEMA = "mbp-1"  # top of book + trades
 DEFAULT_STYPE_IN = "continuous"
 # The team's CME Plus plan includes L0/L1 history (mbp-1, tbbo, ...) and the
