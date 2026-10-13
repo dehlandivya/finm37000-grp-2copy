@@ -57,12 +57,12 @@ def test_missing_key_raises(monkeypatch):
 
 def test_path_scheme(tmp_path, monkeypatch):
     monkeypatch.setattr(ingest, "RAW_DIR", tmp_path)
-    path = ingest.raw_path("ES.c.0", START, END)
+    path = ingest.raw_path("ES.v.0", START, END)
     assert path == (
         tmp_path
         / "GLBX.MDP3"
         / "mbp-1"
-        / "ES.c.0_2026-10-08T13-30_2026-10-08T14-30.dbn.zst"
+        / "ES.v.0_2026-10-08T13-30_2026-10-08T14-30.dbn.zst"
     )
 
 
@@ -74,8 +74,8 @@ def test_path_scheme_includes_non_default_stype_in(tmp_path, monkeypatch):
 
 
 def test_different_stype_in_is_not_a_cache_hit(client):
-    ingest.load_raw("ES.c.0", START, END)
-    ingest.load_raw("ES.c.0", START, END, stype_in="raw_symbol")
+    ingest.load_raw("ES.v.0", START, END)
+    ingest.load_raw("ES.v.0", START, END, stype_in="raw_symbol")
     assert client.timeseries.calls == 2
 
 
@@ -85,56 +85,56 @@ def test_raw_dir_is_repo_rooted():
 
 
 def test_cache_miss_downloads_and_writes(client):
-    path = ingest.load_raw("ES.c.0", START, END)
+    path = ingest.load_raw("ES.v.0", START, END)
     assert client.timeseries.calls == 1
-    assert path == ingest.raw_path("ES.c.0", START, END)
+    assert path == ingest.raw_path("ES.v.0", START, END)
     assert path.read_bytes() == b"fake"
 
 
 def test_cache_hit_skips_client(client, monkeypatch):
-    first = ingest.load_raw("ES.c.0", START, END)
+    first = ingest.load_raw("ES.v.0", START, END)
 
     def fail():
         raise AssertionError("client should not be created on a cache hit")
 
     monkeypatch.setattr(ingest, "get_client", fail)
-    assert ingest.load_raw("ES.c.0", START, END) == first
+    assert ingest.load_raw("ES.v.0", START, END) == first
     assert client.timeseries.calls == 1
 
 
 def test_force_redownloads(client):
-    ingest.load_raw("ES.c.0", START, END)
-    ingest.load_raw("ES.c.0", START, END, force=True)
+    ingest.load_raw("ES.v.0", START, END)
+    ingest.load_raw("ES.v.0", START, END, force=True)
     assert client.timeseries.calls == 2
 
 
 def test_max_cost_aborts(client):
     client.metadata.cost = 10.0
     with pytest.raises(RuntimeError, match="max_cost"):
-        ingest.load_raw("ES.c.0", START, END, max_cost=1.0)
+        ingest.load_raw("ES.v.0", START, END, max_cost=1.0)
     assert client.timeseries.calls == 0
-    assert not ingest.raw_path("ES.c.0", START, END).exists()
+    assert not ingest.raw_path("ES.v.0", START, END).exists()
 
 
 def test_billed_request_aborts_by_default(client):
     client.metadata.cost = 0.31  # e.g. mbp-10 older than the plan's 1 month
     with pytest.raises(RuntimeError, match="max_cost"):
-        ingest.load_raw("ES.c.0", START, END, schema="mbp-10")
+        ingest.load_raw("ES.v.0", START, END, schema="mbp-10")
     assert client.timeseries.calls == 0
 
 
 def test_max_cost_none_allows_billed_request(client):
     client.metadata.cost = 0.31
-    ingest.load_raw("ES.c.0", START, END, max_cost=None)
+    ingest.load_raw("ES.v.0", START, END, max_cost=None)
     assert client.timeseries.calls == 1
 
 
 def test_max_size_aborts(client):
     client.metadata.size = 5_000_000_000
     with pytest.raises(RuntimeError, match="max_size_gb"):
-        ingest.load_raw("ES.c.0", START, END, max_size_gb=1.0)
+        ingest.load_raw("ES.v.0", START, END, max_size_gb=1.0)
     assert client.timeseries.calls == 0
-    assert not ingest.raw_path("ES.c.0", START, END).exists()
+    assert not ingest.raw_path("ES.v.0", START, END).exists()
 
 
 def test_read_raw(monkeypatch, tmp_path):

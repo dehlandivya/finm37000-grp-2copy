@@ -28,37 +28,20 @@ The project does **not** assume that order book signals will ultimately generate
 
 ## Data
 
-The primary data source will be CME market data obtained through Databento.
+We use CME Globex market data for E-mini S&P 500 futures (`ES`) from Databento. It is pulled through the Databento Historical API with each member's own API key, stored in a git-ignored `.env` file (see [How to Run](#how-to-run)). Raw data is cached in the git-ignored `data/raw/` directory and is never committed.
 
-The initial instrument will be:
+| Item | Specification |
+|---|---|
+| Dataset | `GLBX.MDP3` (CME Globex MDP 3.0) |
+| Schemas | `mbp-1` (top-of-book updates and trades), `definition` (contract metadata) |
+| Symbol | `ES.v.0`, `stype_in="continuous"` (front contract by volume) |
+| Session | Regular trading hours, 08:30–15:15 CT |
+| Dev sample | 2026-10-08 |
+| Research sample | 2026-07-01 to 2026-09-30 |
+| Fields | `ts_event`, `ts_recv`, `action`, `side`, `price`, `size`, `bid_px_00`, `ask_px_00`, `bid_sz_00`, `ask_sz_00`, `bid_ct_00`, `ask_ct_00`, `instrument_id`, `sequence`, `flags` |
+| Robustness (optional) | `NQ.v.0` with the same settings |
 
-- **E-mini S&P 500 Futures (`ES`)**
-
-If time and data availability permit, the analysis may be extended to E-mini Nasdaq-100 (`NQ`) futures as a robustness test.
-
-We expect to use high-frequency market data containing:
-
-- Best bid and ask prices
-- Best bid and ask quantities
-- Trades and trading volume
-- Timestamps
-- Contract and instrument information
-
-From these data, we will construct variables including:
-
-- Midprice
-- Bid-ask spread
-- Order book imbalance
-- Order flow imbalance
-- Microprice
-- Recent returns
-- Trading intensity
-- Realized volatility
-- Liquidity measures
-
-The exact Databento schema and sample period will be determined during initial data exploration.
-
-A Databento API key and appropriate CME data access will be required. API credentials and raw market data will **not** be committed to the repository. Local raw data should be stored in the git-ignored `data/` directory.
+Schema choice, roll handling, cost estimates and data-processing notes are in the [Appendix](#appendix-data-specification-notes).
 
 ## Research Questions
 
@@ -209,3 +192,27 @@ See the repository's open GitHub Issues for detailed goals, acceptance criteria,
 Team roles and responsibilities are documented in `docs/roles.md`.
 
 The project follows a pull-request workflow in which team members contribute to and review the README and issue roadmap before implementation.
+
+## Appendix: Data Specification Notes
+
+**Schema.** Every feature in the Methodology uses only the best level of the book. OFI needs every change at the best quotes, so `mbp-1` is the right schema. `tbbo` (quotes only at trade times) and `bbo-1s` (1-second snapshots) miss those changes. `mbp-10` and `mbo` aren't needed, and our CME Plus plan covers only their most recent month.
+
+**Rolls.** `ES.v.0` is used instead of `ES.c.0` because the calendar roll stays on the expiring contract after its liquidity has gone. In Sep 2026, ESU6 had no RTH trades on 09-18, but `ES.c.0` only rolled on 09-20. `ES.v.0` rolled ESU6 → ESZ6 on 2026-09-16 at 00:00 UTC, so every RTH day contains a single contract. A roll shows up as a change in `instrument_id`, and returns are never computed across one (#7).
+
+**Cost and size** (estimated 2026-10-13, uncompressed). Everything is $0 under the CME Plus plan.
+
+| Sample | `mbp-1` records | Size |
+|---|---|---|
+| Dev (1 day) | 6.2 M | 0.50 GB |
+| Research (66 weekdays) | 349 M | 27.95 GB |
+
+The research sample is too large for one DataFrame, so it is processed one day at a time (#8).
+
+**Processing notes** (from checking small real samples):
+
+- **Time conversion:** RTH is 13:30–20:15 UTC while Chicago is on CDT, and 14:30–21:15 UTC on CST.
+- **Holidays:** drop the holiday-shortened sessions on 2026-07-03 and 2026-09-07.
+- **Contract code:** the `symbol` column holds `ES.v.0`. Get the contract code (e.g. `ESZ6`) by joining `instrument_id` to `raw_symbol` from `definition`, which also gives tick size (0.25) and multiplier (50).
+- **Size dtype:** sizes are `uint32`. Cast them to `int64` before subtracting, or `bid - ask` wraps around instead of going negative.
+- **Time index:** `read_raw()` indexes by `ts_recv`. Re-index by `ts_event` when cleaning.
+- **Reopen artifacts:** crossed books and `side == "N"` trades appear at the 17:00 CT reopen. The RTH filter removes them.
