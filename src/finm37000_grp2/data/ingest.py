@@ -67,9 +67,16 @@ def raw_path(
     *,
     dataset: str = DATASET,
     schema: str = DEFAULT_SCHEMA,
+    stype_in: str = DEFAULT_STYPE_IN,
 ) -> Path:
-    """Cache path: data/raw/{dataset}/{schema}/{symbols}_{start}_{end}.dbn.zst."""
+    """Cache path: data/raw/{dataset}/{schema}/{symbols}_{start}_{end}.dbn.zst.
+
+    `stype_in` changes how Databento interprets `symbols`, so non-default modes
+    get a `_{stype_in}` suffix to keep their cache files distinct.
+    """
     name = f"{'-'.join(_as_list(symbols))}_{start}_{end}"
+    if stype_in != DEFAULT_STYPE_IN:
+        name += f"_{stype_in}"
     for ch in ":/\\ ":
         name = name.replace(ch, "-")
     return RAW_DIR / dataset / schema / f"{name}.dbn.zst"
@@ -95,7 +102,9 @@ def load_raw(
     either exceeds `max_cost` or `max_size_gb`, the download is aborted. Pass
     `max_cost=None` to allow billed requests.
     """
-    path = raw_path(symbols, start, end, dataset=dataset, schema=schema)
+    path = raw_path(
+        symbols, start, end, dataset=dataset, schema=schema, stype_in=stype_in
+    )
     if path.exists() and not force:
         logger.info("Using cached %s", path)
         return path

@@ -66,6 +66,19 @@ def test_path_scheme(tmp_path, monkeypatch):
     )
 
 
+def test_path_scheme_includes_non_default_stype_in(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingest, "RAW_DIR", tmp_path)
+    path = ingest.raw_path("ESZ6", START, END, stype_in="raw_symbol")
+    assert path.name == "ESZ6_2026-10-08T13-30_2026-10-08T14-30_raw_symbol.dbn.zst"
+    assert path != ingest.raw_path("ESZ6", START, END)
+
+
+def test_different_stype_in_is_not_a_cache_hit(client):
+    ingest.load_raw("ES.c.0", START, END)
+    ingest.load_raw("ES.c.0", START, END, stype_in="raw_symbol")
+    assert client.timeseries.calls == 2
+
+
 def test_raw_dir_is_repo_rooted():
     assert ingest.RAW_DIR == ingest.REPO_ROOT / "data" / "raw"
     assert (ingest.REPO_ROOT / "pyproject.toml").exists()
