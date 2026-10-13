@@ -149,14 +149,21 @@ uv sync
 cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
 # then edit .env and set DATABENTO_API_KEY=<your key>   (.env is git-ignored)
 
-# 4. Run the tests
+# 4. Run the tests (no API key needed)
 uv run pytest
 
-# 5. Run the project
-# Aspirational — the final entry point will execute the
-# data -> features -> analysis -> backtest pipeline
-uv run python -m finm37000_grp2
+# 5. Download the dev sample (one RTH session) and write clean Parquet
+uv run python -m finm37000_grp2 --sample dev
 ```
+
+The pipeline runs `load_raw` → `read_raw` → `clean` → `validate` → Parquet one session at a time, for the samples defined in `src/finm37000_grp2/config.py`:
+
+- Raw downloads are cached in `data/raw/`, and clean sessions are written to `data/processed/ES/{YYYY-MM-DD}.parquet` (read them with `clean.read_clean`). Both are git-ignored.
+- `--sample research` runs the full research period (64 sessions, about 28 GB uncompressed to download).
+- Sessions already in `data/processed/` are skipped, so an interrupted run resumes where it stopped. `--force` downloads and cleans everything again.
+- `--offline` runs the same pipeline on synthetic data with no API key, writing to `data/processed/offline/`. It only checks the code; the data is not realistic.
+
+Downloads abort if Databento estimates any cost, since everything we use is covered by the CME Plus plan.
 
 During development, exploratory analysis will also be available through notebooks in the `notebooks/` directory.
 
@@ -208,7 +215,7 @@ The project follows a pull-request workflow in which team members contribute to 
 | Dev (1 day) | 6.2 M | 0.50 GB |
 | Research (66 weekdays) | 349 M | 27.95 GB |
 
-The research sample is too large for one DataFrame, so it is processed one day at a time (#8).
+The research sample is too large for one DataFrame, so it is downloaded and processed one RTH session at a time.
 
 **Processing notes** (from checking small real samples):
 

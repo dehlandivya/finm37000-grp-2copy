@@ -16,24 +16,15 @@ Two `mbp-1` details shape the design (checked on real 2026 samples):
 """
 
 import logging
-from datetime import date, time
+from datetime import date
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from .ingest import REPO_ROOT
+from .. import config
 
 logger = logging.getLogger(__name__)
-
-# TODO(#8): move to config.py.
-PROCESSED_DIR = REPO_ROOT / "data" / "processed"  # git-ignored
-
-TZ = "America/Chicago"
-RTH_START = time(8, 30)  # CT, inclusive
-RTH_END = time(15, 15)  # CT, exclusive
-# Holiday-shortened sessions in the research sample (README Data appendix).
-HOLIDAYS = frozenset({date(2026, 7, 3), date(2026, 9, 7)})
 
 F_LAST = 0x80  # Databento flag: last record of an exchange packet
 
@@ -73,17 +64,33 @@ REQUIRED = [c for c in SCHEMA if c != "price"]
 
 def session_date(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
     """Chicago calendar date of each timestamp, as naive midnight timestamps."""
-    return index.tz_convert(TZ).normalize().tz_localize(None)
+    return index.tz_convert(config.TZ).normalize().tz_localize(None)
 
 
 def in_rth(index: pd.DatetimeIndex) -> np.ndarray:
     """True for timestamps inside 08:30-15:15 CT on a non-holiday."""
-    local = index.tz_convert(TZ)
+    local = index.tz_convert(config.TZ)
     minute = local.hour * 60 + local.minute
-    start = RTH_START.hour * 60 + RTH_START.minute
-    end = RTH_END.hour * 60 + RTH_END.minute
-    holiday = session_date(index).isin(pd.to_datetime(sorted(HOLIDAYS)))
+    start = config.RTH_START.hour * 60 + config.RTH_START.minute
+    end = config.RTH_END.hour * 60 + config.RTH_END.minute
+    holiday = session_date(index).isin(pd.to_datetime(sorted(config.HOLIDAYS)))
     return np.asarray((minute >= start) & (minute < end) & ~holiday)
+
+
+def rth_bounds(day: date | str) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """UTC [start, end) of one session's regular trading hours."""
+    day = pd.Timestamp(day)
+    start, end = (
+        pd.Timestamp.combine(day, t).tz_localize(config.TZ).tz_convert("UTC")
+        for t in (config.RTH_START, config.RTH_END)
+    )
+    return start, end
+
+
+def session_dates(start: date | str, end: date | str) -> list[date]:
+    """Weekdays from `start` to `end` (inclusive), minus `config.HOLIDAYS`."""
+    days = pd.bdate_range(start, end).date
+    return [d for d in days if d not in config.HOLIDAYS]
 
 
 def _mark_segments(df: pd.DataFrame) -> pd.DataFrame:
@@ -112,7 +119,7 @@ def clean(raw: pd.DataFrame) -> pd.DataFrame:
     - Index by `ts_event` (UTC, ns) and keep `ts_recv`. Rows are stably
       sorted by (`ts_event`, `sequence`), so records within one packet keep
       their original order (a trade row stays before its F_LAST book row).
-    - Keep regular trading hours, 08:30-15:15 CT, minus `HOLIDAYS`.
+    - Keep regular trading hours, 08:30-15:15 CT, minus `config.HOLIDAYS`.
     - Drop rows with an undefined or crossed best bid/ask, or a non-positive
       top-of-book size. Locked books (`bid_px == ask_px`) are kept and
       flagged in `locked`.
@@ -197,8 +204,8 @@ def trades(df: pd.DataFrame) -> pd.DataFrame:
 
 def processed_path(day: date | str, *, root: str | Path | None = None) -> Path:
     """Parquet path for one session: data/processed/ES/{YYYY-MM-DD}.parquet."""
-    root = PROCESSED_DIR if root is None else Path(root)
-    return root / "ES" / f"{pd.Timestamp(day):%Y-%m-%d}.parquet"
+    root = config.PROCESSED_DIR if root is None else Path(root)
+    return root / config.PRODUCT / f"{pd.Timestamp(day):%Y-%m-%d}.parquet"
 
 
 def write_clean(df: pd.DataFrame, *, root: str | Path | None = None) -> list[Path]:

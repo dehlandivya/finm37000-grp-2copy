@@ -8,25 +8,14 @@ import databento as db
 import pandas as pd
 from dotenv import load_dotenv
 
+from .. import config
+
 logger = logging.getLogger(__name__)
-
-DATASET = "GLBX.MDP3"
-DEFAULT_SYMBOL = "ES.v.0"  # continuous, highest-volume contract (see README Data)
-DEFAULT_SCHEMA = "mbp-1"  # top of book + trades
-DEFAULT_STYPE_IN = "continuous"
-# The team's CME Plus plan includes L0/L1 history (mbp-1, tbbo, ...) and the
-# last month of L2/L3 (mbp-10, mbo), so anything billed is unexpected.
-DEFAULT_MAX_COST = 0.0
-
-# Resolved from the repo root so it doesn't depend on the working directory.
-# TODO(#8): move to config.py.
-REPO_ROOT = Path(__file__).resolve().parents[3]
-RAW_DIR = REPO_ROOT / "data" / "raw"  # git-ignored
 
 
 def get_client() -> db.Historical:
     """Build a Databento client from DATABENTO_API_KEY (environment or `.env`)."""
-    load_dotenv(REPO_ROOT / ".env")
+    load_dotenv(config.REPO_ROOT / ".env")
     key = os.environ.get("DATABENTO_API_KEY")
     if not key:
         raise RuntimeError(
@@ -45,9 +34,9 @@ def estimate_cost(
     start: str,
     end: str,
     *,
-    dataset: str = DATASET,
-    schema: str = DEFAULT_SCHEMA,
-    stype_in: str = DEFAULT_STYPE_IN,
+    dataset: str = config.DATASET,
+    schema: str = config.SCHEMA,
+    stype_in: str = config.STYPE_IN,
 ) -> float:
     """Return the estimated download cost in USD."""
     return get_client().metadata.get_cost(
@@ -65,9 +54,9 @@ def raw_path(
     start: str,
     end: str,
     *,
-    dataset: str = DATASET,
-    schema: str = DEFAULT_SCHEMA,
-    stype_in: str = DEFAULT_STYPE_IN,
+    dataset: str = config.DATASET,
+    schema: str = config.SCHEMA,
+    stype_in: str = config.STYPE_IN,
 ) -> Path:
     """Cache path: data/raw/{dataset}/{schema}/{symbols}_{start}_{end}.dbn.zst.
 
@@ -75,11 +64,11 @@ def raw_path(
     get a `_{stype_in}` suffix to keep their cache files distinct.
     """
     name = f"{'-'.join(_as_list(symbols))}_{start}_{end}"
-    if stype_in != DEFAULT_STYPE_IN:
+    if stype_in != config.STYPE_IN:
         name += f"_{stype_in}"
     for ch in ":/\\ ":
         name = name.replace(ch, "-")
-    return RAW_DIR / dataset / schema / f"{name}.dbn.zst"
+    return config.RAW_DIR / dataset / schema / f"{name}.dbn.zst"
 
 
 def load_raw(
@@ -87,11 +76,11 @@ def load_raw(
     start: str,
     end: str,
     *,
-    dataset: str = DATASET,
-    schema: str = DEFAULT_SCHEMA,
-    stype_in: str = DEFAULT_STYPE_IN,
+    dataset: str = config.DATASET,
+    schema: str = config.SCHEMA,
+    stype_in: str = config.STYPE_IN,
     force: bool = False,
-    max_cost: float | None = DEFAULT_MAX_COST,
+    max_cost: float | None = config.MAX_COST,
     max_size_gb: float | None = None,
 ) -> Path:
     """Download raw data once to data/raw/ and return the cached file's path.

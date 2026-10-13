@@ -5,6 +5,10 @@ into the event-level dataset below. This schema is the interface between the
 data pipeline (#7, #8) and the analysis (#2). `validate(df)` checks every
 invariant listed here.
 
+`uv run python -m finm37000_grp2 --sample dev` (or `--sample research`)
+writes these files for every session in the sample (see README How to Run).
+By hand:
+
 ```python
 from finm37000_grp2.data import clean, ingest
 
