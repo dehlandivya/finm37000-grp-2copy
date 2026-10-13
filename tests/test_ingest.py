@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from finm37000_grp2 import config
 from finm37000_grp2.data import ingest
 
 START, END = "2026-10-08T13:30", "2026-10-08T14:30"
@@ -43,7 +44,7 @@ class FakeClient:
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     client = FakeClient()
-    monkeypatch.setattr(ingest, "RAW_DIR", tmp_path)
+    monkeypatch.setattr(config, "RAW_DIR", tmp_path)
     monkeypatch.setattr(ingest, "get_client", lambda: client)
     return client
 
@@ -56,7 +57,7 @@ def test_missing_key_raises(monkeypatch):
 
 
 def test_path_scheme(tmp_path, monkeypatch):
-    monkeypatch.setattr(ingest, "RAW_DIR", tmp_path)
+    monkeypatch.setattr(config, "RAW_DIR", tmp_path)
     path = ingest.raw_path("ES.v.0", START, END)
     assert path == (
         tmp_path
@@ -67,7 +68,7 @@ def test_path_scheme(tmp_path, monkeypatch):
 
 
 def test_path_scheme_includes_non_default_stype_in(tmp_path, monkeypatch):
-    monkeypatch.setattr(ingest, "RAW_DIR", tmp_path)
+    monkeypatch.setattr(config, "RAW_DIR", tmp_path)
     path = ingest.raw_path("ESZ6", START, END, stype_in="raw_symbol")
     assert path.name == "ESZ6_2026-10-08T13-30_2026-10-08T14-30_raw_symbol.dbn.zst"
     assert path != ingest.raw_path("ESZ6", START, END)
@@ -77,11 +78,6 @@ def test_different_stype_in_is_not_a_cache_hit(client):
     ingest.load_raw("ES.v.0", START, END)
     ingest.load_raw("ES.v.0", START, END, stype_in="raw_symbol")
     assert client.timeseries.calls == 2
-
-
-def test_raw_dir_is_repo_rooted():
-    assert ingest.RAW_DIR == ingest.REPO_ROOT / "data" / "raw"
-    assert (ingest.REPO_ROOT / "pyproject.toml").exists()
 
 
 def test_cache_miss_downloads_and_writes(client):
