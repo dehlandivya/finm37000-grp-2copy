@@ -164,8 +164,9 @@ cd finm37000-grp-2
 # 2. Create the environment and install dependencies
 uv sync
 
-# 3. Configure Databento credentials
-export DATABENTO_API_KEY="your-api-key"
+# 3. Configure your own Databento API key (https://databento.com/portal/keys)
+cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
+# then edit .env and set DATABENTO_API_KEY=<your key>   (.env is git-ignored)
 
 # 4. Run the tests
 uv run pytest
