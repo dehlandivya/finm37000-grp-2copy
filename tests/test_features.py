@@ -5,6 +5,8 @@ we can verify the calculations without downloading
 real Databento data.
 """
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from finm37000_grp2.features import (
@@ -61,3 +63,64 @@ def test_microprice_negative_size():
     """Microprice should reject negative order quantities."""
     with pytest.raises(ValueError):
         calculate_microprice(5800.00, 5800.25, -10, 40)
+
+
+def test_obi_uint32():
+    bid = np.uint32(40)
+    ask = np.uint32(120)
+
+    result = calculate_obi(bid, ask)
+
+    assert result == pytest.approx(-0.5)
+
+
+def test_obi_pandas_series():
+    """Check that OBI works on multiple observations at once."""
+
+    # Simulate two rows of market data.
+    bid_sizes = pd.Series([20, 40])
+    ask_sizes = pd.Series([26, 20])
+
+    result = calculate_obi(bid_sizes, ask_sizes)
+
+    # Compare against the expected OBI for each row.
+    np.testing.assert_allclose(result, [-6 / 46, 20 / 60])
+
+
+def test_microprice_pandas_series():
+    """Check that microprice works on multiple observations at once."""
+
+    # Simulate two rows of market data.
+    bid_prices = pd.Series([100.0, 101.0])
+    ask_prices = pd.Series([101.0, 102.0])
+    bid_sizes = pd.Series([20, 40])
+    ask_sizes = pd.Series([30, 20])
+
+    result = calculate_microprice(bid_prices, ask_prices, bid_sizes, ask_sizes)
+
+    # Compare against the expected microprice for each row.
+    np.testing.assert_allclose(
+        result,
+        [
+            (101 * 20 + 100 * 30) / 50,
+            (102 * 40 + 101 * 20) / 60,
+        ],
+    )
+
+
+def test_obi_missing_size():
+    """OBI should reject missing order quantities."""
+    with pytest.raises(ValueError):
+        calculate_obi(20, np.nan)
+
+
+def test_microprice_missing_price():
+    """Microprice should reject missing prices."""
+    with pytest.raises(ValueError):
+        calculate_microprice(np.nan, 5800.25, 120, 40)
+
+
+def test_obi_infinite_size():
+    """OBI should reject infinite order quantities."""
+    with pytest.raises(ValueError):
+        calculate_obi(20, np.inf)

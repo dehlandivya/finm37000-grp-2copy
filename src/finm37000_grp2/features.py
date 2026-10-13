@@ -7,6 +7,8 @@ We will later analyze whether these features can predict
 short-term price movements in ES futures.
 """
 
+import numpy as np
+
 
 def calculate_midprice(bid_price: float, ask_price: float) -> float:
     """Calculate the midpoint between the best bid and ask prices."""
@@ -26,51 +28,56 @@ def calculate_spread(bid_price: float, ask_price: float) -> float:
     return ask_price - bid_price
 
 
-def calculate_obi(bid_size: float, ask_size: float) -> float:
-    """Calculate Order Book Imbalance (OBI) using top-of-book quantities."""
+def calculate_obi(bid_size, ask_size):
+    """Calculate order book imbalance from displayed bid and ask sizes."""
 
-    # Bid size = number of contracts available at the best bid.
-    # Ask size = number of contracts available at the best ask.
-    # Together, these represent displayed liquidity at the top of the book.
-    total_size = bid_size + ask_size
+    # Convert to float before subtracting to avoid unsigned integer overflow.
+    # NumPy arrays also allow us to process entire DataFrame columns.
+    bid_size = np.asarray(bid_size, dtype="float64")
+    ask_size = np.asarray(ask_size, dtype="float64")
 
-    # Negative quantities are invalid because order sizes cannot
-    # represent a negative number of contracts.
-    if bid_size < 0 or ask_size < 0:
+    # Reject missing or non-finite order quantities.
+    if not np.isfinite(bid_size).all() or not np.isfinite(ask_size).all():
+        raise ValueError("Bid and ask sizes must be finite numbers.")
+
+    # Reject negative sizes anywhere in the input.
+    if (bid_size < 0).any() or (ask_size < 0).any():
         raise ValueError("Bid and ask sizes cannot be negative.")
 
-    # Avoid dividing by zero when both sides have no displayed quantity.
-    if total_size == 0:
+    total_size = bid_size + ask_size
+
+    # Avoid dividing by zero.
+    if (total_size == 0).any():
         raise ValueError("Total order book size cannot be zero.")
 
-    # OBI = (bid_size - ask_size) / (bid_size + ask_size)
-    #
-    # Positive OBI: more contracts at the bid than the ask.
-    # Negative OBI: more contracts at the ask than the bid.
-    # OBI = 0: equal quantities on both sides.
-    #
-    # OBI ranges from -1 to +1 for valid nonnegative quantities.
-    # We will test whether OBI predicts future price movements.
     return (bid_size - ask_size) / total_size
 
 
-def calculate_microprice(
-    bid_price: float,
-    ask_price: float,
-    bid_size: float,
-    ask_size: float,
-) -> float:
-    """Calculate the microprice using bid/ask prices and quantities."""
+def calculate_microprice(bid_price, ask_price, bid_size, ask_size):
+    """Calculate the quantity-weighted microprice from bid/ask data."""
 
-    # Check that displayed order quantities are valid.
-    if bid_size < 0 or ask_size < 0:
+    # Convert inputs to NumPy arrays so the function can process
+    # individual values or entire DataFrame columns.
+    bid_price = np.asarray(bid_price, dtype="float64")
+    ask_price = np.asarray(ask_price, dtype="float64")
+    bid_size = np.asarray(bid_size, dtype="float64")
+    ask_size = np.asarray(ask_size, dtype="float64")
+
+    # Reject missing or non-finite prices and order quantities.
+    if not all(
+        np.isfinite(values).all()
+        for values in (bid_price, ask_price, bid_size, ask_size)
+    ):
+        raise ValueError("Bid/ask prices and sizes must be finite numbers.")
+
+    # Reject negative order sizes.
+    if (bid_size < 0).any() or (ask_size < 0).any():
         raise ValueError("Bid and ask sizes cannot be negative.")
 
     total_size = bid_size + ask_size
 
-    # Both quantities cannot be zero because we need
-    # a positive total size to calculate a weighted price.
-    if total_size == 0:
+    # Avoid division by zero when there are no displayed orders.
+    if (total_size == 0).any():
         raise ValueError("Total order book size cannot be zero.")
 
     # Microprice = (ask_price * bid_size + bid_price * ask_size)
