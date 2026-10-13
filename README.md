@@ -80,27 +80,23 @@ Potential prediction horizons include 1, 5, 10, 30, and 60 seconds.
 
 Order book imbalance will initially be defined as
 
-\[
-OBI_t =
-\frac{Q_{bid,t}-Q_{ask,t}}
-{Q_{bid,t}+Q_{ask,t}}
-\]
+$$
+\mathrm{OBI}_t = \frac{Q^{\text{bid}}_t - Q^{\text{ask}}_t}{Q^{\text{bid}}_t + Q^{\text{ask}}_t}
+$$
 
-where \(Q_{bid,t}\) and \(Q_{ask,t}\) are displayed quantities at the best bid and ask.
+where $Q^{\text{bid}}_t$ and $Q^{\text{ask}}_t$ are the displayed quantities at the best bid and ask.
 
 The midprice will be
 
-\[
-M_t = \frac{P_{bid,t}+P_{ask,t}}{2}.
-\]
+$$
+M_t = \frac{P^{\text{bid}}_t + P^{\text{ask}}_t}{2}
+$$
 
 We will also construct the quantity-weighted microprice
 
-\[
-P^{micro}_t =
-\frac{P_{ask,t}Q_{bid,t}+P_{bid,t}Q_{ask,t}}
-{Q_{bid,t}+Q_{ask,t}}.
-\]
+$$
+P^{\text{micro}}_t = \frac{P^{\text{ask}}_t \, Q^{\text{bid}}_t + P^{\text{bid}}_t \, Q^{\text{ask}}_t}{Q^{\text{bid}}_t + Q^{\text{ask}}_t}
+$$
 
 Additional dynamic features such as order flow imbalance, trading intensity, recent returns, volume, volatility, and liquidity may be incorporated as the research develops.
 
