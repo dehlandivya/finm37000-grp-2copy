@@ -1,4 +1,3 @@
-
 """Calculate order book features from ES futures market data.
 
 These features describe the current state of the order book,
@@ -84,7 +83,4 @@ def calculate_microprice(
     #
     # This makes microprice a possible indicator of short-term
     # price pressure, which we will evaluate in our analysis.
-    return (
-        ask_price * bid_size + bid_price * ask_size
-    ) / total_size
-
+    return (ask_price * bid_size + bid_price * ask_size) / total_size

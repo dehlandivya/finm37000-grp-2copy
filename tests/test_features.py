@@ -1,4 +1,3 @@
-
 """Tests for order book feature calculations.
 
 These tests use synthetic (made-up) market data so that
@@ -9,10 +8,10 @@ real Databento data.
 import pytest
 
 from finm37000_grp2.features import (
-    calculate_midprice,
-    calculate_spread,
-    calculate_obi,
     calculate_microprice,
+    calculate_midprice,
+    calculate_obi,
+    calculate_spread,
 )
 
 
