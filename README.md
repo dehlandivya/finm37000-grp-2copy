@@ -28,94 +28,20 @@ The project does **not** assume that order book signals will ultimately generate
 
 ## Data
 
-The primary data source will be CME market data obtained through Databento.
+We use CME Globex market data for E-mini S&P 500 futures (`ES`) from Databento. It is pulled through the Databento Historical API with each member's own API key, stored in a git-ignored `.env` file (see [How to Run](#how-to-run)). Raw data is cached in the git-ignored `data/raw/` directory and is never committed.
 
-The initial instrument will be:
-
-- **E-mini S&P 500 Futures (`ES`)**
-
-If time and data availability permit, the analysis may be extended to E-mini Nasdaq-100 (`NQ`) futures as a robustness test.
-
-We expect to use high-frequency market data containing:
-
-- Best bid and ask prices
-- Best bid and ask quantities
-- Trades and trading volume
-- Timestamps
-- Contract and instrument information
-
-From these data, we will construct variables including:
-
-- Midprice
-- Bid-ask spread
-- Order book imbalance
-- Order flow imbalance
-- Microprice
-- Recent returns
-- Trading intensity
-- Realized volatility
-- Liquidity measures
-
-### Data Specification
-
-Every member pulls identical data with the settings below. The defaults live in `src/finm37000_grp2/data/ingest.py`.
-
-| Item | Choice |
+| Item | Specification |
 |---|---|
 | Dataset | `GLBX.MDP3` (CME Globex MDP 3.0) |
-| Primary schema | `mbp-1`: every top-of-book update plus every trade |
-| Metadata schema | `definition`: contract code (`raw_symbol`, e.g. `ESZ6`), tick size (0.25), multiplier (50), expiration |
-| Symbol | `ES.v.0` with `stype_in="continuous"` (front contract by volume) |
-| Session | RTH only, 08:30–15:15 CT |
-| Dev sample | 2026-10-08 RTH (`2026-10-08T13:30` to `2026-10-08T20:15` UTC) |
-| Research sample | 2026-07-01 to 2026-09-30 RTH: 66 weekdays, 64 full sessions, including the Sep 2026 roll |
-| Optional robustness | `NQ.v.0` with the same settings, only if time permits |
+| Schemas | `mbp-1` (top-of-book updates and trades), `definition` (contract metadata) |
+| Symbol | `ES.v.0`, `stype_in="continuous"` (front contract by volume) |
+| Session | Regular trading hours, 08:30–15:15 CT |
+| Dev sample | 2026-10-08 |
+| Research sample | 2026-07-01 to 2026-09-30 |
+| Fields | `ts_event`, `ts_recv`, `action`, `side`, `price`, `size`, `bid_px_00`, `ask_px_00`, `bid_sz_00`, `ask_sz_00`, `bid_ct_00`, `ask_ct_00`, `instrument_id`, `sequence`, `flags` |
+| Robustness (optional) | `NQ.v.0` with the same settings |
 
-**Why `mbp-1`.** All features in the [Methodology](#methodology) use only the best level of the book. OBI, midprice and microprice need the best bid/ask prices and sizes. OFI needs every change at the best quotes, not snapshots. Forward midprice returns and execution delay need the BBO at arbitrary times. `mbp-1` has all of this in one event stream, including trades with aggressor side.
-
-- `tbbo` only records quotes at trade times, so OFI and fixed-horizon midprice returns can't be computed from it.
-- `bbo-1s` and `bbo-1m` are snapshots that lose the within-interval events OFI depends on.
-- `mbp-10` and `mbo` are only needed for multi-level imbalance or queue-position modelling, which are out of scope. Our CME Plus plan also covers only the most recent month of L2/L3 history.
-
-**Symbology and rolls.** We use `ES.v.0`, which follows the contract with the highest volume, instead of the calendar-front `ES.c.0`.
-
-- In Sep 2026, `ES.c.0` stayed on ESU6 until 09-20. By 09-17, ESU6 had about 32k RTH trades against about 246k for ESZ6, and on 09-18 it had no RTH trades at all.
-- `ES.v.0` rolled ESU6 → ESZ6 on **2026-09-16**. The switch happens at 00:00 UTC (19:00 CT the previous evening), in the middle of the overnight session. With RTH only, each day therefore has a single contract, and rolls always fall between days.
-- A roll shows up in the data as a change in `instrument_id` (ESU6 = `42140870`, ESZ6 = `10252`). The `symbol` column holds the requested symbol (`ES.v.0`), not the contract. To get the contract code, join `instrument_id` to `raw_symbol` from the `definition` schema.
-- Downstream code flags the first row after a roll and never computes returns across it (#7).
-- `ES.v.0` uses the previous day's volume, so it lags the actual liquidity crossover by a day or two (on 09-14 ESZ6 already traded more than ESU6). Analysis may exclude the roll week as a robustness check.
-
-**Session.** We use RTH only (08:30–15:15 CT). This avoids the thin overnight book and the daily 16:00–17:00 CT maintenance halt, and cuts the data size by about 27%. The loader takes UTC timestamps, and every sample date falls in CDT (UTC−5), so RTH is 13:30–20:15 UTC. Dates after 2026-11-01 (CST, UTC−6) would be 14:30–21:15 UTC. The research sample includes two holiday-shortened sessions, 2026-07-03 and 2026-09-07. Both stop trading at 12:00 CT and have about 4% of normal volume, so they should be dropped during cleaning.
-
-**Cost and size.** These were estimated with `metadata.get_cost`, `get_billable_size` and `get_record_count` on 2026-10-13. Sizes are uncompressed. The `.dbn.zst` files on disk are smaller.
-
-| Sample | Schema | Records | Size | Cost |
-|---|---|---|---|---|
-| Dev (1 RTH day) | `mbp-1` | 6.2 M | 0.50 GB | $0.00 |
-| Dev (1 RTH day) | `definition` | 1 | < 1 KB | $0.00 |
-| Research (66 RTH days) | `mbp-1` | 349 M | 27.95 GB | $0.00 |
-| Research | `definition` | 79 | < 1 KB | $0.00 |
-
-The CME Plus plan covers L1 history, so everything costs $0. The loader also refuses billed requests by default (`max_cost=0`). Disk space and memory are the real limits: the research sample is too large for a single DataFrame, so the pipeline downloads and processes it one day at a time (#8).
-
-**Fields used** (from `mbp-1`):
-
-| Field | Use |
-|---|---|
-| `ts_event` | Exchange event time, the primary time index (`read_raw()` indexes by `ts_recv`, so cleaning re-indexes) |
-| `ts_recv` | Capture time, used for latency and execution-delay modelling |
-| `action`, `side` | Event type (`A`dd, `C`ancel, `M`odify, `T`rade in our samples); for trades, `side` is the aggressor (`B`/`A`), or `N` for auction trades at the 17:00 CT reopen |
-| `price`, `size` | Event price and size (trade price and size when `action == "T"`) |
-| `bid_px_00`, `ask_px_00` | Best bid/ask after the event: midprice, spread, microprice |
-| `bid_sz_00`, `ask_sz_00` | Best bid/ask size: OBI, OFI, microprice. These are `uint32`, so cast to `int64` before subtracting, or `bid - ask` wraps around instead of going negative |
-| `bid_ct_00`, `ask_ct_00` | Number of orders at the best bid/ask, used for liquidity measures |
-| `instrument_id` | Contract identity and roll detection |
-| `symbol` | Requested symbol (`ES.v.0`); not the contract code |
-| `sequence`, `flags` | Ordering within a timestamp and record-quality flags |
-
-**Checked on real data.** Small `mbp-1` pulls ($0) were read with `load_raw()` → `read_raw()`: 2026-10-08 14:00–14:01 UTC (21k rows) and 2026-09-15 20:14 UTC → 09-16 13:31 UTC across the roll (1.8M rows). All the fields above are present, with no NaN or zero top-of-book sizes. There were no crossed or locked books in the RTH minutes sampled. The only crossed rows were 3 rows at the 17:00 CT reopen, which the RTH filter removes. Cleaning (#7) should still check for them over the full sample.
-
-**Access.** All data is pulled programmatically through the **Databento Historical API** with the `databento` Python client, using each member's **own API key** stored in a local `.env` file (see [How to Run](#how-to-run)). API credentials and raw market data will **not** be committed to the repository. Raw downloads are cached in the git-ignored `data/raw/` directory.
+Schema choice, roll handling, cost estimates and data-processing notes are in the [Appendix](#appendix-data-specification-notes).
 
 ## Research Questions
 
@@ -266,3 +192,27 @@ See the repository's open GitHub Issues for detailed goals, acceptance criteria,
 Team roles and responsibilities are documented in `docs/roles.md`.
 
 The project follows a pull-request workflow in which team members contribute to and review the README and issue roadmap before implementation.
+
+## Appendix: Data Specification Notes
+
+**Schema.** Every feature in the Methodology uses only the best level of the book. OFI needs every change at the best quotes, so `mbp-1` is the right schema. `tbbo` (quotes only at trade times) and `bbo-1s` (1-second snapshots) miss those changes. `mbp-10` and `mbo` aren't needed, and our CME Plus plan covers only their most recent month.
+
+**Rolls.** `ES.v.0` is used instead of `ES.c.0` because the calendar roll stays on the expiring contract after its liquidity has gone. In Sep 2026, ESU6 had no RTH trades on 09-18, but `ES.c.0` only rolled on 09-20. `ES.v.0` rolled ESU6 → ESZ6 on 2026-09-16 at 00:00 UTC, so every RTH day contains a single contract. A roll shows up as a change in `instrument_id`, and returns are never computed across one (#7).
+
+**Cost and size** (estimated 2026-10-13, uncompressed). Everything is $0 under the CME Plus plan.
+
+| Sample | `mbp-1` records | Size |
+|---|---|---|
+| Dev (1 day) | 6.2 M | 0.50 GB |
+| Research (66 weekdays) | 349 M | 27.95 GB |
+
+The research sample is too large for one DataFrame, so it is processed one day at a time (#8).
+
+**Processing notes** (from checking small real samples):
+
+- **Time conversion:** RTH is 13:30–20:15 UTC while Chicago is on CDT, and 14:30–21:15 UTC on CST.
+- **Holidays:** drop the holiday-shortened sessions on 2026-07-03 and 2026-09-07.
+- **Contract code:** the `symbol` column holds `ES.v.0`. Get the contract code (e.g. `ESZ6`) by joining `instrument_id` to `raw_symbol` from `definition`, which also gives tick size (0.25) and multiplier (50).
+- **Size dtype:** sizes are `uint32`. Cast them to `int64` before subtracting, or `bid - ask` wraps around instead of going negative.
+- **Time index:** `read_raw()` indexes by `ts_recv`. Re-index by `ts_event` when cleaning.
+- **Reopen artifacts:** crossed books and `side == "N"` trades appear at the 17:00 CT reopen. The RTH filter removes them.
