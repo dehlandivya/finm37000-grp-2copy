@@ -25,6 +25,7 @@ class QuoteColumns:
     ask_sz: str = "ask_sz"
     symbol: str = "instrument_id"
 
+
 DEFAULT_QUOTE_COLUMNS = QuoteColumns()
 
 
