@@ -116,7 +116,7 @@ def make_second_panel(
     horizons_seconds: Sequence[int] = DEFAULT_HORIZONS,
     tick_size: float = ES_TICK_SIZE,
 ) -> pd.DataFrame:
-    """Aggregate independently per session/roll/contract segment; no cross-boundary targets."""
+    """Aggregate by segment without crossing session or contract boundaries."""
     if tick_size <= 0 or any(v <= 0 for v in (*windows_seconds, *horizons_seconds)):
         raise ValueError("Windows, horizons, and tick size must be positive")
     if "ofi_event" not in quotes:
