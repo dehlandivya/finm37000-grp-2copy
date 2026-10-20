@@ -43,6 +43,30 @@ We use CME Globex market data for E-mini S&P 500 futures (`ES`) from Databento. 
 
 Schema choice, roll handling, cost estimates and data-processing notes are in the [Appendix](#appendix-data-specification-notes).
 
+### In-sample / out-of-sample split
+
+The research sample is split once, in `src/finm37000_grp2/config.py`, so every
+analysis uses the same definition.
+
+| Sample          | Dates                    | Sessions | Use |
+|-----------------|--------------------------|----------|-----|
+| `in_sample`     | 2026-07-01 to 2026-08-31 | 43       | Signal research, model estimation and parameter choices (horizons, thresholds) |
+| `out_of_sample` | 2026-09-01 to 2026-09-30 | 21       | Final strategy backtest only, run once after parameters are frozen |
+| `dev`           | 2026-10-08               | 1        | Code development and debugging; no conclusions are drawn from it |
+
+Session counts exclude the holiday-shortened days (2026-07-03 in-sample,
+2026-09-07 out-of-sample). The out-of-sample month also contains the
+ESU6 to ESZ6 roll on 2026-09-16, so the backtest is tested around a roll.
+
+Rules:
+
+- Research notebooks and modules use `in_sample` only, selected by sample name
+  (for example `--sample in_sample`) rather than hard-coded dates.
+- Do not look at out-of-sample results until strategy parameters are frozen.
+  The backtest on `out_of_sample` is run once.
+
+
+
 The cleaned dataset that feeds the analysis is documented in [`docs/data-schema.md`](docs/data-schema.md).
 
 ## Research Questions
