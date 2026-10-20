@@ -46,4 +46,9 @@ class Sample:
 SAMPLES = {
     "dev": Sample(date(2026, 10, 8), date(2026, 10, 8)),
     "research": Sample(date(2026, 7, 1), date(2026, 9, 30)),
+    # Split of the research sample (issue #17). Choose signals, horizons and
+    # thresholds on in_sample only; run the final backtest once on
+    # out_of_sample after parameters are frozen.
+    "in_sample": Sample(date(2026, 7, 1), date(2026, 8, 31)),
+    "out_of_sample": Sample(date(2026, 9, 1), date(2026, 9, 30)),
 }
