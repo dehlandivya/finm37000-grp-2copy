@@ -6,13 +6,18 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "databento",
+    "matplotlib>=3.11.2",
     "pandas",
     "pyarrow>=26.0.0",
     "python-dotenv>=1.2.4",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "ipykernel>=7.4.0",
+    "pytest>=8",
+    "ruff>=0.6",
+]
 
 [build-system]
 requires = ["hatchling"]
