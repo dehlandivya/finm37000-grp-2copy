@@ -33,6 +33,8 @@ The 43-session sample (July 1 to August 31, 2026) is split chronologically by se
 
 ![Mean next-second return by OBI decile](docs/figures/obi_deciles_1s.png)
 
+![Daily 1-second OBI slope across the 11 validation sessions](docs/figures/daily_obi_slope.png)
+
 ## What We Built
 
 - **Data pipeline.** A single command downloads `GLBX.MDP3` `mbp-1` records for `ES.v.0` (the front contract by volume) one regular-hours session at a time. It cleans and validates them and writes one Parquet file per session. The cleaning step drops crossed books and out-of-session rows, marks contract rolls and casts unsigned sizes to signed integers. `validate()` checks every schema invariant, and the pipeline has pytest coverage ([`docs/data-schema.md`](docs/data-schema.md)).
