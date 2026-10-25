@@ -1,251 +1,100 @@
-# FINM 37000 — Group 2 Project
+# Order Book Imbalance in ES Futures: Predictable, but Not Tradable
 
-## From Order Book Imbalance to Executable Alpha
+**FINM 37000 — Group 2**
 
-### Project Goal
+We used Databento's CME top-of-book data for E-mini S&P 500 futures (`ES`) to test whether order book imbalance (OBI) and order flow imbalance (OFI) predict short-horizon price moves. **They do, but the predicted moves are too small to trade.** On 11 held-out trading sessions, a one-variable OBI model explains about 4% of the variance of the next one-second midprice change. Its direction is stable every day, and its forecasts are well calibrated. However, its largest forecast is 0.46 ticks, and a market-order round trip costs a full 1-tick spread before fees. **Not one of 267,072 out-of-sample predictions clears that cost.**
 
-This project investigates whether information contained in the limit order book can predict short-horizon price movements in CME equity index futures and whether this predictive information can be converted into an executable trading strategy.
+We started out planning to turn the strongest signal into a backtested trading strategy. Because no signal beats the spread, a strategy that crosses the spread would lose money on average. The project instead reports the signal research and explains why the gap between statistical and economic significance appears.
 
-Using high-frequency CME E-mini S&P 500 (`ES`) futures data from Databento, we will study signals including order book imbalance, order flow imbalance, and microprice. We will evaluate both their statistical predictive power and whether any identified alpha survives realistic bid-ask spreads, transaction costs, and execution delays.
+![Distribution of absolute OBI predictions against the 1-tick spread](docs/figures/prediction_vs_spread.png)
 
-## Desired Outcome
+## Key Findings
 
-The desired outcome is a reproducible quantitative research pipeline that takes raw CME futures market data through the full process:
+The 43-session sample (July 1 to August 31, 2026) is split chronologically by session: models are fit on the first 32 sessions and evaluated on the last 11 (Aug 17–31).
 
-**Market Data → Order Book Features → Alpha Research → Execution Analysis → Strategy Backtest**
+| Horizon | OBI R² | OFI R² | OBI + OFI R² |
+|---|---|---|---|
+| 1 s | 0.0421 | 0.0004 | 0.0429 |
+| 5 s | 0.0099 | 0.0000 | 0.0100 |
+| 10 s | 0.0047 | −0.0000 | 0.0047 |
+| 30 s | 0.0015 | −0.0001 | 0.0015 |
+| 60 s | 0.0008 | −0.0002 | 0.0008 |
 
-The completed project will:
+*Validation (out-of-sample) R² of linear regressions of the forward midprice change in ticks.*
 
-- Construct high-frequency order book and market microstructure features from CME futures data.
-- Test whether order book imbalance, order flow, and microprice predict subsequent midprice movements over short horizons.
-- Measure how quickly identified predictive signals decay.
-- Develop a rules-based trading strategy based on the strongest identified signals.
-- Evaluate whether statistical alpha remains economically meaningful after bid-ask spreads, transaction costs, and execution delays.
-- Produce figures and performance statistics including signal decay, P&L, Sharpe ratio, maximum drawdown, win rate, turnover, and P&L per trade.
-- Provide a reproducible entry point allowing another user with Databento access to run the analysis.
+1. **OBI is the signal.** The resting-size imbalance at the best bid and ask is by far the strongest predictor. Average next-second returns rise steadily across OBI deciles, from −0.31 ticks in the lowest decile to +0.30 ticks in the highest.
+2. **It decays within seconds.** R² falls by three-quarters between 1 and 5 seconds and is near zero at one minute. The information is used up almost as soon as it is posted.
+3. **OFI adds almost nothing.** On its own, OFI's R² is close to zero. Adding it to OBI raises the 1-second R² from 0.0421 to 0.0429, and its decile pattern is not monotonic. On the single-day OFI study, no OFI regression coefficient was statistically significant (all HAC |t| < 1.3).
+4. **Microprice is OBI in disguise.** Microprice minus midprice equals (spread ÷ 2) × OBI exactly. On July 1, 95% of ES book states had a one-tick spread, and across the 43 sessions the two are 0.997 correlated and have practically the same R² (0.0418 vs 0.0421).
+5. **The relationship is stable and well calibrated.** The 1-second OBI slope is positive in all 11 validation sessions (mean 0.452 ticks per unit of OBI, s.d. 0.024). Predicted and realized returns line up across prediction deciles: the top bin predicts +0.310 ticks and realizes +0.301.
+6. **It doesn't pay.** The mean absolute 1-second forecast is 0.155 ticks (about $1.94 per contract), against a 1-tick ($12.50) round-trip cost.
 
-The project does **not** assume that order book signals will ultimately generate profitable trading performance. A finding that statistical predictability disappears after realistic execution assumptions would also be a meaningful outcome.
+![Validation R² by forecast horizon](docs/figures/r2_by_horizon.png)
 
-## Data
+![Mean next-second return by OBI decile](docs/figures/obi_deciles_1s.png)
 
-We use CME Globex market data for E-mini S&P 500 futures (`ES`) from Databento. It is pulled through the Databento Historical API with each member's own API key, stored in a git-ignored `.env` file (see [How to Run](#how-to-run)). Raw data is cached in the git-ignored `data/raw/` directory and is never committed.
+![Daily 1-second OBI slope across the 11 validation sessions](docs/figures/daily_obi_slope.png)
 
-| Item | Specification |
-|---|---|
-| Dataset | `GLBX.MDP3` (CME Globex MDP 3.0) |
-| Schemas | `mbp-1` (top-of-book updates and trades), `definition` (contract metadata) |
-| Symbol | `ES.v.0`, `stype_in="continuous"` (front contract by volume) |
-| Session | Regular trading hours, 08:30–15:15 CT |
-| Dev sample | 2026-10-08 |
-| Research sample | 2026-07-01 to 2026-09-30 |
-| Fields | `ts_event`, `ts_recv`, `action`, `side`, `price`, `size`, `bid_px_00`, `ask_px_00`, `bid_sz_00`, `ask_sz_00`, `bid_ct_00`, `ask_ct_00`, `instrument_id`, `sequence`, `flags` |
-| Robustness (optional) | `NQ.v.0` with the same settings |
+## What We Built
 
-Schema choice, roll handling, cost estimates and data-processing notes are in the [Appendix](#appendix-data-specification-notes).
+- **Data pipeline.** A single command downloads `GLBX.MDP3` `mbp-1` records for `ES.v.0` (the front contract by volume) one regular-hours session at a time. It cleans and validates them and writes one Parquet file per session. The cleaning step drops crossed books and out-of-session rows, marks contract rolls and casts unsigned sizes to signed integers. `validate()` checks every schema invariant, and the pipeline has pytest coverage ([`docs/data-schema.md`](docs/data-schema.md)).
+- **Signals** (`features.py`, `ofi_analysis.py`). The signals are OBI, microprice and best-level OFI (Cont, Kukanov and Stoikov), aggregated to a one-second panel. Each signal is measured at the end of a second, and forward returns start at that same boundary. Returns never cross a session or contract boundary.
+- **Evaluation.** We use chronological train/validation splits by whole session, with decile cutoffs taken from training data only. The evaluation also covers daily slope stability, calibration, and a comparison against the spread.
 
-### In-sample / out-of-sample split
+September 2026 was held out for a final strategy backtest. Since no signal survived the spread on the validation data, that backtest was never run and the September data was never used.
 
-The research sample is split once, in `src/finm37000_grp2/config.py`, so every
-analysis uses the same definition.
+## Limitations and Future Work
 
-| Sample          | Dates                    | Sessions | Use |
-|-----------------|--------------------------|----------|-----|
-| `in_sample`     | 2026-07-01 to 2026-08-31 | 43       | Signal research, model estimation and parameter choices (horizons, thresholds) |
-| `out_of_sample` | 2026-09-01 to 2026-09-30 | 21       | Final strategy backtest only, run once after parameters are frozen |
-| `dev`           | 2026-10-08               | 1        | Code development and debugging; no conclusions are drawn from it |
-
-Session counts exclude the holiday-shortened days (2026-07-03 in-sample,
-2026-09-07 out-of-sample). The out-of-sample month also contains the
-ESU6 to ESZ6 roll on 2026-09-16, so the backtest is tested around a roll.
-
-Rules:
-
-- Research notebooks and modules use `in_sample` only, selected by sample name
-  (for example `--sample in_sample`) rather than hard-coded dates.
-- Do not look at out-of-sample results until strategy parameters are frozen.
-  The backtest on `out_of_sample` is run once.
-
-
-
-The cleaned dataset that feeds the analysis is documented in [`docs/data-schema.md`](docs/data-schema.md).
-
-## Research Questions
-
-The analysis will focus on four primary questions:
-
-1. **Predictability:** Does order book imbalance predict subsequent short-horizon midprice movements in ES futures?
-
-2. **Incremental information:** Do dynamic measures such as order flow imbalance and microprice provide predictive information beyond static order book imbalance?
-
-3. **Alpha decay:** How quickly does the predictive information contained in the order book decay across different forecast horizons?
-
-4. **Tradability:** Does any identified statistical predictability remain economically meaningful after incorporating bid-ask spreads, transaction costs, and execution delays?
-
-Potential prediction horizons include 1, 5, 10, 30, and 60 seconds.
-
-## Methodology
-
-### Order Book Features
-
-Order book imbalance will initially be defined as
-
-$$
-\mathrm{OBI}_t = \frac{Q^{\text{bid}}_t - Q^{\text{ask}}_t}{Q^{\text{bid}}_t + Q^{\text{ask}}_t}
-$$
-
-where $Q^{\text{bid}}_t$ and $Q^{\text{ask}}_t$ are the displayed quantities at the best bid and ask.
-
-The midprice will be
-
-$$
-M_t = \frac{P^{\text{bid}}_t + P^{\text{ask}}_t}{2}
-$$
-
-We will also construct the quantity-weighted microprice
-
-$$
-P^{\text{micro}}_t = \frac{P^{\text{ask}}_t \, Q^{\text{bid}}_t + P^{\text{bid}}_t \, Q^{\text{ask}}_t}{Q^{\text{bid}}_t + Q^{\text{ask}}_t}
-$$
-
-Additional dynamic features such as order flow imbalance, trading intensity, recent returns, volume, volatility, and liquidity may be incorporated as the research develops.
-
-### Alpha Research
-
-We will test whether these features predict subsequent midprice movements over multiple short horizons.
-
-Initial analysis will use conditional return analysis and interpretable statistical models such as linear and logistic regression. More complex models may be explored if they provide meaningful incremental predictive value.
-
-The analysis will emphasize:
-
-- Conditional future returns
-- Directional predictability
-- Signal strength
-- Alpha decay
-- Stability through time
-- Performance across different volatility and liquidity regimes
-
-### Execution Analysis
-
-Predictive accuracy alone does not imply a profitable trading strategy. We will therefore incorporate execution assumptions into the analysis.
-
-At minimum, the project will model aggressive execution in which trades cross the prevailing bid-ask spread.
-
-We will investigate how strategy performance changes with:
-
-- Bid-ask spread
-- Transaction costs
-- Execution delay
-- Signal threshold
-- Holding period
-
-If feasible given the available data, we will additionally investigate passive execution and post-trade markouts as measures of adverse selection.
-
-### Backtesting
-
-Signals that demonstrate out-of-sample predictive power will be converted into rules-based trading strategies.
-
-Backtests will preserve the chronological ordering of observations and use chronological train/test splits or walk-forward evaluation to minimize look-ahead bias.
-
-Strategy evaluation will include metrics such as:
-
-- Cumulative P&L
-- Sharpe ratio
-- Maximum drawdown
-- Win rate
-- P&L per trade
-- Turnover
-- Number of trades
-- Transaction-cost sensitivity
+The cost test assumes a fixed 1-tick spread and aggressive (market-order) execution, and it ignores exchange fees, latency and queue position. These omissions only make the conclusion stronger for aggressive trading. They do not rule out **passive** strategies, which earn the spread rather than pay it. Using OBI to decide when to post or cancel limit orders, with fill and adverse-selection modelling, is the natural next step. Other extensions are non-linear models, deeper book levels (`mbp-10`) and testing the robustness of the results on `NQ`.
 
 ## How to Run
 
-The project uses `uv` for environment management.
+Requires [`uv`](https://docs.astral.sh/uv/) and a Databento API key. Everything used is covered by the CME Plus plan; downloads abort if Databento quotes any cost.
 
 ```bash
-# 1. Clone your fork
-git clone https://github.com/<your-username>/finm37000-grp-2.git
+git clone https://github.com/elliotchung/finm37000-grp-2.git
 cd finm37000-grp-2
+uv sync                       # installs dependencies, including JupyterLab
 
-# 2. Create the environment and install dependencies
-uv sync
+cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
+# edit .env and set DATABENTO_API_KEY=<your key>   (.env is git-ignored)
 
-# 3. Configure your own Databento API key (https://databento.com/portal/keys)
-cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
-# then edit .env and set DATABENTO_API_KEY=<your key>   (.env is git-ignored)
+uv run pytest                 # no API key needed
 
-# 4. Run the tests (no API key needed)
-uv run pytest
-
-# 5. Download the dev sample (one RTH session) and write clean Parquet
+# Download and clean the 43 in-sample sessions (Jul 1 – Aug 31, 2026; about 18 GB uncompressed)
+uv run python -m finm37000_grp2 --sample in_sample
+# Optional: one development session (2026-10-08) for the preliminary notebooks
 uv run python -m finm37000_grp2 --sample dev
+
+uv run jupyter lab            # then open notebooks/
 ```
 
-The pipeline runs `load_raw` → `read_raw` → `clean` → `validate` → Parquet one session at a time, for the samples defined in `src/finm37000_grp2/config.py`:
+Raw downloads are cached in `data/raw/`, and clean sessions are written to `data/processed/ES/{YYYY-MM-DD}.parquet` (both git-ignored). Sessions already on disk are skipped, so an interrupted download resumes where it stopped (`--force` redoes everything). The other sample names are `research` (Jul–Sep) and `out_of_sample` (Sep), which is unused. `--offline` writes synthetic data to `data/processed/offline/` to check the code without a key; the notebooks do not read it.
 
-- Raw downloads are cached in `data/raw/`, and clean sessions are written to `data/processed/ES/{YYYY-MM-DD}.parquet` (read them with `clean.read_clean`). Both are git-ignored.
-- `--sample research` runs the full research period (64 sessions, about 28 GB uncompressed to download).
-- Sessions already in `data/processed/` are skipped, so an interrupted run resumes where it stopped. `--force` downloads and cleans everything again.
-- `--offline` runs the same pipeline on synthetic data with no API key, writing to `data/processed/offline/`. It only checks the code; the data is not realistic.
+| Notebook | Data | Produces |
+|---|---|---|
+| `multi_session_analysis.ipynb` | `in_sample` | **All headline results:** model comparison, R² by horizon, deciles, calibration, spread test and daily stability. Caches the one-second panel to `data/processed/ES/in_sample_signals.parquet`. |
+| `signal_analysis.ipynb` | `dev` | Preliminary single-day OBI and microprice correlations, and price moves vs spread |
+| `ofi_research.ipynb` | `dev` (change `SAMPLE` in the first code cell) | Single-day OFI construction, leakage checks and HAC regressions |
 
-Downloads abort if Databento estimates any cost, since everything we use is covered by the CME Plus plan.
-
-During development, exploratory analysis will also be available through notebooks in the `notebooks/` directory.
-
-The final repository will provide instructions for reproducing the primary analysis from CME data obtained through Databento.
+To run a notebook headlessly, use `uv run jupyter nbconvert --to notebook --execute --inplace notebooks/<name>.ipynb`. The multi-session notebook processes each session separately to limit memory use. Building the panel takes several minutes. The figures in `docs/figures/` were exported from its outputs.
 
 ## Repository Layout
 
 ```text
 .
-├── src/finm37000_grp2/   # Data, features, signals, execution, and backtesting
-├── tests/                # pytest tests
-├── notebooks/            # Exploratory research and analysis
-├── data/                 # Local market data (git-ignored)
-├── docs/                 # Assignment docs, roles, and planning notes
-└── .github/              # Issue/PR templates and CI
+├── src/finm37000_grp2/
+│   ├── config.py           # paths, Databento request, sample periods
+│   ├── pipeline.py         # download → clean → validate → Parquet, per session
+│   ├── data/               # ingest.py, clean.py, synthetic.py
+│   ├── features.py         # midprice, spread, OBI, microprice
+│   └── ofi_analysis.py     # event OFI, 1-second panel, splits, regressions
+├── notebooks/              # analysis notebooks (table above)
+├── tests/                  # pytest suite
+├── docs/                   # data schema, figures, course and planning docs
+└── PLANNING.md             # original project plan and data-specification notes
 ```
-
-## Roadmap
-
-Implementation is organized through GitHub Issues covering:
-
-1. CME/Databento data sourcing and contract selection
-2. Market data ingestion and validation
-3. Construction of a clean research dataset
-4. Order book feature engineering
-5. Short-horizon alpha research and signal decay
-6. Execution and transaction-cost modeling
-7. Strategy backtesting and robustness analysis
-8. Final visualizations, documentation, and reproducibility
-
-See the repository's open GitHub Issues for detailed goals, acceptance criteria, dependencies, and task ownership.
 
 ## Team
 
-Team roles and responsibilities are documented in `docs/roles.md`.
-
-The project follows a pull-request workflow in which team members contribute to and review the README and issue roadmap before implementation.
-
-## Appendix: Data Specification Notes
-
-**Schema.** Every feature in the Methodology uses only the best level of the book. OFI needs every change at the best quotes, so `mbp-1` is the right schema. `tbbo` (quotes only at trade times) and `bbo-1s` (1-second snapshots) miss those changes. `mbp-10` and `mbo` aren't needed, and our CME Plus plan covers only their most recent month.
-
-**Rolls.** `ES.v.0` is used instead of `ES.c.0` because the calendar roll stays on the expiring contract after its liquidity has gone. In Sep 2026, ESU6 had no RTH trades on 09-18, but `ES.c.0` only rolled on 09-20. `ES.v.0` rolled ESU6 → ESZ6 on 2026-09-16 at 00:00 UTC, so every RTH day contains a single contract. A roll shows up as a change in `instrument_id`, and returns are never computed across one (#7).
-
-**Cost and size** (estimated 2026-10-13, uncompressed). Everything is $0 under the CME Plus plan.
-
-| Sample | `mbp-1` records | Size |
-|---|---|---|
-| Dev (1 day) | 6.2 M | 0.50 GB |
-| Research (66 weekdays) | 349 M | 27.95 GB |
-
-The research sample is too large for one DataFrame, so it is downloaded and processed one RTH session at a time.
-
-**Processing notes** (from checking small real samples):
-
-- **Time conversion:** RTH is 13:30–20:15 UTC while Chicago is on CDT, and 14:30–21:15 UTC on CST.
-- **Holidays:** drop the holiday-shortened sessions on 2026-07-03 and 2026-09-07.
-- **Contract code:** the `symbol` column holds `ES.v.0`. Get the contract code (e.g. `ESZ6`) by joining `instrument_id` to `raw_symbol` from `definition`, which also gives tick size (0.25) and multiplier (50).
-- **Size dtype:** sizes are `uint32`. Cast them to `int64` before subtracting, or `bid - ask` wraps around instead of going negative.
-- **Time index:** `read_raw()` indexes by `ts_recv`. Re-index by `ts_event` when cleaning.
-- **Reopen artifacts:** crossed books and `side == "N"` trades appear at the 17:00 CT reopen. The RTH filter removes them.
+Elliot Chung ([@elliotchung](https://github.com/elliotchung)), Vidhi Jain ([@vidhijain28](https://github.com/vidhijain28)), Divyaa Dehlan ([@dehlandivya](https://github.com/dehlandivya)), Kayla Hammonds ([@khammonds530-max](https://github.com/khammonds530-max)).

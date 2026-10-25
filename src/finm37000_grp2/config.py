@@ -1,6 +1,6 @@
 """Central configuration (issue #8): paths, Databento settings and samples.
 
-Everything else reads these values from here. See README Data for the reasons
+Everything else reads these values from here. See PLANNING.md Data for the reasons
 behind each choice.
 """
 
@@ -31,7 +31,7 @@ MAX_COST = 0.0
 TZ = "America/Chicago"
 RTH_START = time(8, 30)  # CT, inclusive
 RTH_END = time(15, 15)  # CT, exclusive
-# Holiday-shortened sessions in the research sample (README Data appendix).
+# Holiday-shortened sessions in the research sample (PLANNING.md Data appendix).
 HOLIDAYS = frozenset({date(2026, 7, 3), date(2026, 9, 7)})
 
 
@@ -46,9 +46,9 @@ class Sample:
 SAMPLES = {
     "dev": Sample(date(2026, 10, 8), date(2026, 10, 8)),
     "research": Sample(date(2026, 7, 1), date(2026, 9, 30)),
-    # Split of the research sample (issue #17). Choose signals, horizons and
-    # thresholds on in_sample only; run the final backtest once on
-    # out_of_sample after parameters are frozen.
+    # Split of the research sample (issue #17). All signal research uses
+    # in_sample only. out_of_sample was reserved for a strategy backtest that
+    # was not run because no signal cleared the spread (README).
     "in_sample": Sample(date(2026, 7, 1), date(2026, 8, 31)),
     "out_of_sample": Sample(date(2026, 9, 1), date(2026, 9, 30)),
 }
