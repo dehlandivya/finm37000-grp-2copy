@@ -112,4 +112,4 @@ To run a notebook headlessly, use `uv run jupyter nbconvert --to notebook --exec
 
 ## Team
 
-Elliot Chung ([@elliotchung](https://github.com/elliotchung)), Vidhi Jain ([@vidhijain28](https://github.com/vidhijain28)), Divyaa Dehlan ([@dehlandivya](https://github.com/dehlandivya)), Kayla Hammonds ([@khammonds530-max](https://github.com/khammonds530-max)).
+Elliot Chung ([@elliotchung](https://github.com/elliotchung)), Vidhi Jain ([@vidhijain28](https://github.com/vidhijain28)), Divya Dehlan ([@dehlandivya](https://github.com/dehlandivya)), Kayla Hammonds ([@khammonds530-max](https://github.com/khammonds530-max)).
