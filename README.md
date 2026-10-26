@@ -43,6 +43,13 @@ The 43-session sample (July 1 to August 31, 2026) is split chronologically by se
 
 September 2026 was held out for a final strategy backtest. Since no signal survived the spread on the validation data, that backtest was never run and the September data was never used.
 
+## What the results mean
+
+- **The signal decays fast.** Predictive power is concentrated at the shortest horizons and fades quickly as the horizon lengthens, which is exactly where spread costs matter most.
+- **Predictability is not profitability.** A statistically significant signal only becomes a strategy if its expected gain exceeds the cost of crossing the bid-ask spread. In ES the spread is one tick (0.25 index points) in about 95% of book updates in our development session.
+- **Microprice adds little beyond OBI at the top of the book.** With our definitions, microprice minus mid equals half the spread times OBI, so the two signals are almost mechanically related. Testing for information beyond static imbalance requires a different signal, such as order flow imbalance.
+- **Price changes are discrete.** ES moves in 0.25-point ticks, so many short-horizon mid-price changes are exactly zero. We measure future moves in ticks so they compare directly with the cost of crossing the spread.
+
 ## Limitations and Future Work
 
 The cost test assumes a fixed 1-tick spread and aggressive (market-order) execution, and it ignores exchange fees, latency and queue position. These omissions only make the conclusion stronger for aggressive trading. They do not rule out **passive** strategies, which earn the spread rather than pay it. Using OBI to decide when to post or cancel limit orders, with fill and adverse-selection modelling, is the natural next step. Other extensions are non-linear models, deeper book levels (`mbp-10`) and testing the robustness of the results on `NQ`.
@@ -78,6 +85,14 @@ Raw downloads are cached in `data/raw/`, and clean sessions are written to `data
 | `ofi_research.ipynb` | `dev` (change `SAMPLE` in the first code cell) | Single-day OFI construction, leakage checks and HAC regressions |
 
 To run a notebook headlessly, use `uv run jupyter nbconvert --to notebook --execute --inplace notebooks/<name>.ipynb`. The multi-session notebook processes each session separately to limit memory use. Building the panel takes several minutes. The figures in `docs/figures/` were exported from its outputs.
+
+## Data and pipeline notes
+
+- **Data:** CME Globex dataset `GLBX.MDP3` from Databento, schema `mbp-1` (top-of-book updates and trades), symbol `ES.v.0` (front contract by volume), regular trading hours 08:30-15:15 CT.
+- **Contract rolls:** we use `ES.v.0` rather than `ES.c.0` because the calendar roll stays on the expiring contract after its liquidity has gone. A roll shows up as a change in `instrument_id`, and returns are never computed across one.
+- **Samples:** a one-session development sample (2026-10-08, about 6.2 M records) and a research sample from 2026-07-01 to 2026-09-30 (64 sessions, about 349 M records, about 28 GB uncompressed).
+- **Processing:** each session is downloaded, cached in `data/raw/`, cleaned and validated, and written as Parquet to `data/processed/ES/`. Sessions already processed are skipped, so an interrupted run resumes where it stopped. The clean-data schema is documented in [`docs/data-schema.md`](docs/data-schema.md).
+- **Cost:** downloads abort if Databento estimates any cost; everything we use is covered by the CME Plus plan.
 
 ## Repository Layout
 
